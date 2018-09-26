@@ -1,0 +1,53 @@
+function [max_i, max_x, n, tot_time] = BIZ_TPMax(RB, alpha, delta, n0, bsize, X0)
+tic
+k = getNumSystems(RB);
+a = 1 - (1-alpha)^(1/(k-1));
+idx = 1:k; % index set of survivors
+
+t = 0;
+n = ones(1, k) * n0;
+W = sum(X0);
+W2 = sum(X0.^2);
+S2 = (W2 - W.^2 ./n) ./ (n-1); % lambda in the paper
+P = 1 - alpha;
+beta_t = sum(n(idx)) / sum(S2(idx));
+q = delta * beta_t .* W ./ n;
+q = q - min(q);
+q = exp(q);
+q = q / sum(q);
+
+while max(q(idx)) < P
+%     [length(idx), sum(n)]
+    idx_elim = find(q(idx) <= a);
+    P = P / (prod(1 - q(idx(idx_elim))));
+    idx(idx_elim) = [];
+    
+    [min_z, z] = min(n(idx) ./ S2(idx));
+    z = idx(z);
+    n_new = ceil(S2(idx) * (n(z) + bsize) / S2(z));
+    n_add = max(0, n_new - n(idx));
+    
+    W_add = zeros(1, length(idx));
+    W2_add = zeros(1, length(idx));
+    for id = 1:length(idx)
+%         samples = genSampleTPMax(RB, idx(id), n_add(id));
+%         W_add(id) = sum(samples);
+%         W2_add(id) = sum(samples.^2);
+        [W_add(id), W2_add(id)] = genSampleTPMax2(RB, idx(id), n_add(id));
+    end
+    
+    W(idx) = W(idx) + W_add;
+    W2(idx) = W2(idx) + W2_add;
+    n(idx) = n(idx) + n_add;
+    S2(idx) = (W2(idx) - W(idx).^2 ./n(idx)) ./ (n(idx)-1);
+    t = t + 1;
+    
+    beta_t = sum(n(idx)) / sum(S2(idx));
+    q(idx) = delta * beta_t .* W(idx) ./ n(idx);
+    q(idx) = q(idx) - max(q(idx));
+    q(idx) = exp(q(idx));
+    q(idx) = q(idx) / sum(q(idx));
+end
+[max_x, max_i] = max(W(idx) ./ n(idx));
+max_i = idx(max_i);
+tot_time = toc;
